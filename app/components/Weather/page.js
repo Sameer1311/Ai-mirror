@@ -107,7 +107,7 @@ const Weather = () => {
     };
 
     fetchWeatherData();
-  }, [city]);
+  }, [city ,fetchAnimation]);
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen w-full relative  px-4">
