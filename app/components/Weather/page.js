@@ -1,9 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { HomeIcon } from "lucide-react";
+import { HomeIcon, AlertTriangle } from "lucide-react";
 import Lottie from "lottie-react";
-import { AlertTriangle } from "lucide-react";
 
 const Weather = () => {
   const [weather, setWeather] = useState(null);
@@ -15,6 +14,7 @@ const Weather = () => {
   const [animationData, setAnimationData] = useState(null);
   const [historyAnimations, setHistoryAnimations] = useState({});
 
+  // Mapping weather codes to animation JSON files
   const weatherAnimations = {
     0: "Sun.json",
     1: "Sun.json",
@@ -32,7 +32,8 @@ const Weather = () => {
     95: "Thunderstorm.json",
   };
 
-  const fetchAnimation = async (weatherCode) => {
+  // Fetch animation data (cached with useCallback)
+  const fetchAnimation = useCallback(async (weatherCode) => {
     const animationFile = weatherAnimations[weatherCode] || "Default.json";
     try {
       const response = await fetch(`/animations/${animationFile}`);
@@ -42,9 +43,10 @@ const Weather = () => {
       }
       return await response.json();
     } catch {
+      console.error("Failed to fetch animation:", animationFile);
       return null;
     }
-  };
+  }, []);
 
   useEffect(() => {
     const fetchWeatherData = async () => {
@@ -52,6 +54,7 @@ const Weather = () => {
       setError(null);
 
       try {
+        // Step 1: Fetch city coordinates
         const geoResponse = await fetch(
           `https://geocoding-api.open-meteo.com/v1/search?name=${city}&count=1`
         );
@@ -62,16 +65,17 @@ const Weather = () => {
 
         const { latitude, longitude } = geoData.results[0];
 
+        // Step 2: Fetch current weather
         const weatherResponse = await fetch(
           `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`
         );
         const weatherData = await weatherResponse.json();
         setWeather(weatherData.current_weather);
 
+        // Step 3: Fetch historical weather (last 7 days)
         const today = new Date();
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(today.getDate() - 7);
-
         const startDate = sevenDaysAgo.toISOString().split("T")[0];
         const endDate = today.toISOString().split("T")[0];
 
@@ -80,16 +84,16 @@ const Weather = () => {
         );
         const historyData = await historyResponse.json();
 
+        // Format history data
         const historyArray = historyData.daily.time.map((date, index) => ({
           date,
           maxTemp: historyData.daily.temperature_2m_max[index],
           minTemp: historyData.daily.temperature_2m_min[index],
           weatherCode: historyData.daily.weathercode[index],
         }));
-
         setHistory(historyArray);
 
-        // Fetch animations dynamically
+        // Step 4: Fetch animations for history and current weather
         const animations = {};
         for (const day of historyArray) {
           animations[day.date] = await fetchAnimation(day.weatherCode);
@@ -100,17 +104,17 @@ const Weather = () => {
         setAnimationData(currentAnimation);
       } catch (error) {
         console.error("Error fetching weather data:", error);
-        setError("⚠️ Something went wrong. Please check address you've entered.");
+        setError("⚠️ Something went wrong. Please check the city name you entered.");
       } finally {
         setLoading(false);
       }
     };
 
     fetchWeatherData();
-  }, [city ,fetchAnimation]);
+  }, [city, fetchAnimation]); // ✅ No infinite loop, `fetchAnimation` is stable due to useCallback
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen w-full relative  px-4">
+    <div className="flex flex-col items-center justify-center min-h-screen w-full relative px-4">
       {/* Background Video */}
       <video
         key={city}
@@ -119,7 +123,7 @@ const Weather = () => {
         loop
         muted
         preload="auto"
-        className="absolute z-[-1] inset-0 w-full h-full object-cover  dark:opacity-30"
+        className="absolute z-[-1] inset-0 w-full h-full object-cover dark:opacity-30"
       />
 
       <div className="w-full max-w-lg md:max-w-xl lg:max-w-2xl p-6 bg-white/10 backdrop-blur-md shadow-xl rounded-2xl text-center">
@@ -159,36 +163,27 @@ const Weather = () => {
 
               {/* Current Weather Animation */}
               {animationData && (
-                <Lottie
-                  animationData={animationData}
-                  loop
-                  autoPlay
-                  className="w-28 h-28 md:w-36 md:h-36 mx-auto mt-4"
-                />
+                <Lottie animationData={animationData} loop autoPlay className="w-28 h-28 md:w-36 md:h-36 mx-auto mt-4" />
               )}
 
               <p className="text-xl md:text-2xl font-bold">{weather.temperature}°C</p>
 
-                {error && (
-          <div className="mt-4 bg-red-500/90 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 animate-fade-in">
-            <AlertTriangle size={20} />
-            <span>{error}</span>
-          </div>
-        )} 
+              {error && (
+                <div className="mt-4 bg-red-500/90 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 animate-fade-in">
+                  <AlertTriangle size={20} />
+                  <span>{error}</span>
+                </div>
+              )}
+
               {/* Historical Weather Data */}
               <div className="mt-6 text-center">
                 <h2 className="text-lg md:text-xl font-semibold">Last 7 Days</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
                   {history.map((day, index) => (
-                    <div key={index}   className="p-4 bg-white/20 rounded-lg transition-transform duration-300 ease-in-out hover:scale-105 hover:shadow-xl">
+                    <div key={index} className="p-4 bg-white/20 rounded-lg hover:scale-105 hover:shadow-xl">
                       <p className="text-sm">{day.date}</p>
                       {historyAnimations[day.date] && (
-                        <Lottie
-                          animationData={historyAnimations[day.date]}
-                          loop
-                          autoPlay
-                          className="w-16 h-16 md:w-20 md:h-20 mx-auto"
-                        />
+                        <Lottie animationData={historyAnimations[day.date]} loop autoPlay className="w-16 h-16 mx-auto" />
                       )}
                       <p className="text-sm md:text-base">Max: {day.maxTemp}°C</p>
                       <p className="text-sm md:text-base">Min: {day.minTemp}°C</p>
